@@ -1,0 +1,43 @@
+{
+    "name": "my-humble-dev",
+    "dockerFile": "Dockerfile",
+    "context": "..",
+    "runArgs": [
+    "--network=host",
+    "--gpus=all",
+    "--env=DISPLAY",
+    "--env=QT_X11_NO_MITSHM=1",
+    "--volume=/tmp/.X11-unix:/tmp/.X11-unix:rw",
+    "--device=/dev/dri",
+    "--device=/dev/snd"
+    ],
+    "containerEnv": {
+        "NVIDIA_VISIBLE_DEVICES": "all",
+        "NVIDIA_DRIVER_CAPABILITIES": "graphics,display,utility,video,compute",
+        "__NV_PRIME_RENDER_OFFLOAD": "1",
+        "__GLX_VENDOR_LIBRARY_NAME": "nvidia",
+        "__NV_PRIME_RENDER_OFFLOAD_PROVIDER": "NVIDIA-G0",
+        "GAZEBO_AUDIO": "0",
+        "ALSOFT_DRIVERS": "null",
+    },
+
+    "mounts": [
+        {
+			"source": "/dev/shm",
+			"target": "/dev/shm",
+			"type": "bind"
+		}
+    ],
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ranch-hand-robotics.rde-pack",
+                "twxs.cmake",
+                "vivaxy.vscode-conventional-commits",
+                "gruntfuggly.todo-tree",
+                "GitHub.copilot",
+				"GitHub.copilot-chat",
+            ]
+        }
+    }
+}
