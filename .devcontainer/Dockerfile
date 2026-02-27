@@ -12,7 +12,8 @@ ros-humble-gazebo-ros-pkgs \
 ros-humble-gazebo-plugins \
 ros-humble-gazebo-msgs \
 gazebo \
-mesa-utils
+mesa-utils \
+python3-pip
 
 # Update apt sources
 RUN curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
