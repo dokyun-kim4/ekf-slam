@@ -1,5 +1,5 @@
 {
-    "name": "my-humble-dev",
+    "name": "ekf-slam",
     "dockerFile": "Dockerfile",
     "context": "..",
     "runArgs": [
@@ -28,6 +28,9 @@
 			"type": "bind"
 		}
     ],
+
+    "workspaceFolder": "/${localWorkspaceFolderBasename}",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/${localWorkspaceFolderBasename},type=bind",
     "customizations": {
         "vscode": {
             "extensions": [
