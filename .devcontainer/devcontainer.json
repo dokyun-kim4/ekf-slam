@@ -40,6 +40,8 @@
                 "gruntfuggly.todo-tree",
                 "GitHub.copilot",
 				"GitHub.copilot-chat",
+                "ms-python.python",
+                "ms-python.vscode-pylance",
             ]
         }
     }
