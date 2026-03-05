@@ -18,4 +18,5 @@ python3-pip
 # Update apt sources
 RUN curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
 
-RUN echo 'alias rosbuild="cd /ekf-slam/ros_ws && colcon build --symlink-install && . install/setup.bash"' >> ~/.bashrc 
+RUN echo 'alias rb="cd /ekf-slam/ros_ws && colcon build --symlink-install && . install/setup.bash"' >> ~/.bashrc 
+RUN echo 'alias sim="cd /ekf-slam/ros_ws && . install/setup.bash && ros2 launch neato2_gazebo empty_world.py"' >> ~/.bashrc
