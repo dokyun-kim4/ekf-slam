@@ -11,6 +11,7 @@ ros-humble-rviz2 \
 ros-humble-gazebo-ros-pkgs \
 ros-humble-gazebo-plugins \
 ros-humble-gazebo-msgs \
+ros-humble-tf-transformations \
 gazebo \
 mesa-utils \
 python3-pip
