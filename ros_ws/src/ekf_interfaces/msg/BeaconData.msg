@@ -1,3 +1,3 @@
-float32 bearing
-float32 range
-uint8 id
+int32[] ids
+float32[] bearings
+float32[] ranges
