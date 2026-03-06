@@ -18,4 +18,9 @@ def generate_launch_description():
         Node(
             package='ekf_slam',
             executable='noise_injector'),
+
+        Node(
+            package='ekf_slam',
+            executable='path_viz'
+        )
     ])
