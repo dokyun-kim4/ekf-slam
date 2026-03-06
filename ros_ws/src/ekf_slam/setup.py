@@ -9,6 +9,7 @@ setup(
     data_files=[
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
+        ('share/' + package_name, ['launch/ekf_slam.launch.py']),
         ('share/' + package_name, ['package.xml']),
     ],
     install_requires=['setuptools'],
@@ -21,7 +22,8 @@ setup(
     entry_points={
         'console_scripts': [
             'noise_injector = ekf_slam.noise_injector:main',
-            'beacon_node = ekf_slam.beacon:main',
+            'beacon = ekf_slam.beacon:main',
+            'path_viz = ekf_slam.path_viz:main'
         ],
     },
 )
