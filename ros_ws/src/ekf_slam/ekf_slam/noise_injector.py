@@ -2,7 +2,7 @@ import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist, Pose2D
 from nav_msgs.msg import Odometry
-from ekf_interfaces.msg import BeaconData # type: ignore
+from ekf_interfaces.msg import BeaconData
 import random
 from typing import Optional
 
@@ -18,10 +18,12 @@ class NoiseInjector(Node):
         self.GPS_Y_NOISE = 0.1 # m
         self.GPS_INTERVAl = 1.0 # seconds
 
-        self.BEACON_RANGE_NOISE = 0.5 # m
+        # TODO: Just inject noise in beacon node and publish both gt and noisy there. 
+        self.BEACON_RANGE_NOISE = 0.1 # m
         self.BEACON_RANGE_PROP_NOISE = 0.05 # m
-        self.BEACON_BEARING_NOISE = 0.523 # rad
+        self.BEACON_BEARING_NOISE = 0.08 # rad
         self.BEACON_INTERVAL = 2.0 # seconds
+        self.BEACON_MAX_RANGE = 2.5 # m
 
         self.ENCODER_LINEAR_NOISE = 0.05 # m/s
         self.ENCODER_LINEAR_NOISE_RATIO = 0.01 # m/s
@@ -43,7 +45,7 @@ class NoiseInjector(Node):
 
         self.cmd_vel_sub = self.create_subscription(Twist, '/cmd_vel', self.cmd_vel_callback, 10)
         self.gps_sub = self.create_subscription(Odometry, '/ground_truth', self.gps_callback, 10)
-        self.beacon_sub = self.create_subscription(BeaconData, '/beacon', self.beacon_callback, 10)
+        self.beacon_sub = self.create_subscription(BeaconData, '/beacon_measurements', self.beacon_callback, 10)
 
         self.cmd_vel_noisy_pub = self.create_publisher(Twist, '/cmd_vel_noisy', 10)
         self.gps_noisy_pub = self.create_publisher(Pose2D, '/gps_noisy', 10)
@@ -106,8 +108,26 @@ class NoiseInjector(Node):
         self.encoder_vel_pub.publish(encoder_vel)
     
     def make_noisy_beacon(self):
-        pass
+        """
+        Simulate noisy beacon readings based on the latest ground truth beacon measurements.
+        """
+        if self.latest_beacon_gt is None:
+            return
+        noisy_msg = BeaconData()
+        for i in range(len(self.latest_beacon_gt.ids)):
+            curr_bearing, curr_range = self.latest_beacon_gt.bearings[i], self.latest_beacon_gt.ranges[i]
 
+            if curr_range > self.BEACON_MAX_RANGE:
+                continue # if beacon is out of range,ignore it
+
+            noisy_msg.ids.append(self.latest_beacon_gt.ids[i])
+            noisy_msg.ranges.append(
+                random.gauss(curr_range, self.BEACON_RANGE_NOISE + curr_range*self.BEACON_RANGE_PROP_NOISE)
+            )
+            noisy_msg.bearings.append(
+                random.gauss(curr_bearing, self.BEACON_BEARING_NOISE)
+            )
+        self.beacon_noisy_pub.publish(noisy_msg)
 
 def main(args=None):
     rclpy.init(args=args)
