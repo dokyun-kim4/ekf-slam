@@ -10,9 +10,20 @@ class NoiseInjector(Node):
     def __init__(self):
         super().__init__('noise_injector')
 
-        # --- Sensor Parameters --- #
+        # --- Sensor Parameters --- #\
+
+        # cmd_vel only publishes once until there is a new command,
+        # so we need to inject noise at a fixed interval to simulate varying motor noise.
         self.MOTOR_LINEAR_NOISE = 0.1 # m/s
         self.MOTOR_ANGULAR_NOISE = 0.05 # rad/s
+        self.MOTOR_STEP_INTERVAL = 0.2 # seconds
+
+        # Encoder interval should match motor step interval
+        self.ENCODER_LINEAR_NOISE = 0.05 # m/s
+        self.ENCODER_LINEAR_NOISE_RATIO = 0.01 # m/s
+        self.ENCODER_ANGULAR_NOISE = 0.1 # rad/s
+        self.ENCODER_ANGULAR_NOISE_RATIO = 0.1 # rad/s
+        self.ENCODER_INTERVAL = 0.2 # seconds
 
         self.GPS_X_NOISE = 0.1 # m
         self.GPS_Y_NOISE = 0.1 # m
@@ -25,12 +36,6 @@ class NoiseInjector(Node):
         self.BEACON_INTERVAL = 2.0 # seconds
         self.BEACON_MAX_RANGE = 2.5 # m
 
-        self.ENCODER_LINEAR_NOISE = 0.05 # m/s
-        self.ENCODER_LINEAR_NOISE_RATIO = 0.01 # m/s
-        self.ENCODER_ANGULAR_NOISE = 0.1 # rad/s
-        self.ENCODER_ANGULAR_NOISE_RATIO = 0.1 # rad/s
-        self.ENCODER_INTERVAL = 0.2 # seconds
-
         # --- Stored Ground Truth State --- #
         self.latest_cmd_vel_gt: Optional[Twist] = None
         self.latest_cmd_vel_actual: Optional[Twist] = None # need this for encoder
@@ -38,11 +43,12 @@ class NoiseInjector(Node):
         self.latest_beacon_gt: Optional[BeaconData] = None
 
         # --- Subscribers, Publishers, and Timers --- #
-
+        self.motor_step_timer = self.create_timer(self.MOTOR_STEP_INTERVAL, self.make_noisy_cmd_vel)
         self.gps_timer = self.create_timer(self.GPS_INTERVAl, self.make_noisy_gps)
         self.beacon_timer = self.create_timer(self.BEACON_INTERVAL, self.make_noisy_beacon)
         self.encoder_timer = self.create_timer(self.ENCODER_INTERVAL, self.make_noisy_encoder)
 
+        # These subscribers just store the latest ground truth data
         self.cmd_vel_sub = self.create_subscription(Twist, '/cmd_vel', self.cmd_vel_callback, 10)
         self.gps_sub = self.create_subscription(Odometry, '/ground_truth', self.gps_callback, 10)
         self.beacon_sub = self.create_subscription(BeaconData, '/beacon_measurements', self.beacon_callback, 10)
@@ -53,35 +59,74 @@ class NoiseInjector(Node):
         self.encoder_vel_pub = self.create_publisher(Twist, '/encoder_vel', 10)
 
     # --- Simple Timer Callbacks to update states --- #
+    
     def gps_callback(self, msg: Odometry):
+        """
+        Updates the latest ground truth GPS message.
+
+        Args:
+         msg (Odometry): The incoming ground truth GPS odometry message.
+
+        Returns:
+         None: No return value.
+        """
         self.latest_gps_gt = msg
     
     def beacon_callback(self, msg: BeaconData):
+        """
+        Updates the latest ground truth beacon measurements.
+
+        Args:
+         msg (BeaconData): The incoming ground truth beacon data message.
+
+        Returns:
+         None: No return value.
+        """
         self.latest_beacon_gt = msg
     
     def cmd_vel_callback(self, msg: Twist):
         """
-        Saves the latest ground truth `/cmd_vel', and immediately publishes a noisy version to `/cmd_vel_noisy`.
-        Also saves the latest executed cmd_vel (with noise) for use in the encoder.
+        Updates the latest ground truth velocity command.
 
         Args:
-            msg (Twist): `/cmd_vel` topic
+         msg (Twist): The incoming velocity command message.
+
+        Returns:
+         None: No return value.
         """
         self.latest_cmd_vel_gt = msg
-        noisy_cmd = Twist()
-        # Our lin_vel command is in X axis since it is a differential drive robot
-        noisy_cmd.linear.x = msg.linear.x + random.gauss(0, self.MOTOR_LINEAR_NOISE)
-        # Similarly, our ang_vel command is in Z axis
-        noisy_cmd.angular.z = msg.angular.z + random.gauss(0, self.MOTOR_ANGULAR_NOISE)
-        self.latest_cmd_vel_actual = noisy_cmd
-        self.cmd_vel_noisy_pub.publish(noisy_cmd)
-
 
     # --- Noise injection for spoofed sensor data--- #
 
+    def make_noisy_cmd_vel(self):
+        """
+        Simulates and publishes a noisy velocity command based on the latest ground truth.
+
+        Args:
+         None: No arguments.
+
+        Returns:
+         None: No return value.
+        """
+        if self.latest_cmd_vel_gt is None:
+            return
+        noisy_cmd = Twist()
+        # Our lin_vel command is in X axis since it is a differential drive robot
+        noisy_cmd.linear.x = self.latest_cmd_vel_gt.linear.x + random.gauss(0, self.MOTOR_LINEAR_NOISE)
+        # Similarly, our ang_vel command is in Z axis
+        noisy_cmd.angular.z = self.latest_cmd_vel_gt.angular.z + random.gauss(0, self.MOTOR_ANGULAR_NOISE)
+        self.latest_cmd_vel_actual = noisy_cmd
+        self.cmd_vel_noisy_pub.publish(noisy_cmd)
+
     def make_noisy_gps(self):
         """
-        Simulate a noisy GPS reading based on the latest ground truth GPS position.
+        Simulates and publishes a noisy GPS reading based on the latest ground truth GPS position.
+
+        Args:
+         None: No arguments.
+
+        Returns:
+         None: No return value.
         """
         if self.latest_gps_gt is None:
             return
@@ -92,7 +137,13 @@ class NoiseInjector(Node):
 
     def make_noisy_encoder(self):
         """
-        Simulate noisy encoder readings based on the latest actual cmd_vel (which already has motor noise). 
+        Simulates and publishes noisy encoder readings based on the latest actual cmd_vel.
+
+        Args:
+         None: No arguments.
+
+        Returns:
+         None: No return value.
         """
         if self.latest_cmd_vel_actual is None:
             return
@@ -109,7 +160,13 @@ class NoiseInjector(Node):
     
     def make_noisy_beacon(self):
         """
-        Simulate noisy beacon readings based on the latest ground truth beacon measurements.
+        Simulates and publishes noisy beacon readings based on the latest ground truth beacon measurements.
+
+        Args:
+         None: No arguments.
+
+        Returns:
+         None: No return value.
         """
         if self.latest_beacon_gt is None:
             return
@@ -130,6 +187,15 @@ class NoiseInjector(Node):
         self.beacon_noisy_pub.publish(noisy_msg)
 
 def main(args=None):
+    """
+    Initializes the ROS 2 node and spins the NoiseInjector.
+
+    Args:
+     args (list, optional): Command line arguments.
+
+    Returns:
+     None: No return value.
+    """
     rclpy.init(args=args)
     node = NoiseInjector()
     rclpy.spin(node)
