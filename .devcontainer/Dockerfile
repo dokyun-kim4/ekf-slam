@@ -14,7 +14,8 @@ ros-humble-gazebo-msgs \
 ros-humble-tf-transformations \
 gazebo \
 mesa-utils \
-python3-pip
+python3-pip \
+wget
 
 # Update apt sources
 RUN curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
