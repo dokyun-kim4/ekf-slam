@@ -20,5 +20,7 @@ wget
 # Update apt sources
 RUN curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
 
+# QoL aliases for frequent commands I'm running
 RUN echo 'alias rb="cd /ekf-slam/ros_ws && colcon build --symlink-install && . install/setup.bash"' >> ~/.bashrc 
 RUN echo 'alias sim="cd /ekf-slam/ros_ws && . install/setup.bash && ros2 launch neato2_gazebo empty_world.py"' >> ~/.bashrc
+RUN echo 'alias i="cd /ekf-slam/ros_ws && . install/setup.bash"' >> ~/.bashrc
