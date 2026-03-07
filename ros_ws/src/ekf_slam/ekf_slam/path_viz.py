@@ -7,9 +7,11 @@ This node is responsible for visualizing the different paths of the EKF SLAM out
 """
 import rclpy
 from rclpy.node import Node
+from rclpy.time import Time
 from nav_msgs.msg import Path, Odometry
 from geometry_msgs.msg import Pose2D, PoseStamped, Twist
 import tf_transformations
+import numpy as np
 
 class PathVizNode(Node):
     
@@ -22,12 +24,13 @@ class PathVizNode(Node):
         self.gps_path_pub = self.create_publisher(Path, '/gps_path', 10)
         self.ekf_path_pub = self.create_publisher(Path, '/ekf_slam_path', 10)
         
-        # Create subscribers for the different paths
+        # Create subscribers for the different topics to use for path generation
         self.create_subscription(Odometry, '/ground_truth', self.plot_gt, 10)
         self.create_subscription(Twist, '/cmd_vel_noisy', self.plot_dead_reckoning, 10)
         self.create_subscription(Pose2D, '/gps_noisy', self.plot_gps, 10)
         self.create_subscription(Path, '/predicted_pose', self.plot_ekf, 10)
 
+        self.latest_gt_pose = None
         self.gt_path = Path()
         self.dr_path = Path()
         self.gps_path = Path()
@@ -42,6 +45,9 @@ class PathVizNode(Node):
         Args:
             msg (Odometry): Odometry message containing the ground truth pose of the robot.
         """
+        # Pocket the latest ground truth pose for use in dead reckoning
+        self.latest_gt_pose = msg
+        
         pose_msg = PoseStamped()
         # Convert Odometry message to Pose 
         pose_msg.header.stamp = self.get_clock().now().to_msg()
@@ -71,7 +77,42 @@ class PathVizNode(Node):
         Args:
             msg (Twist): Twist message containing the velocity commands for the robot.
         """
-        pass
+        if self.latest_gt_pose is None:
+            self.get_logger().warn("No ground truth pose received yet, cannot plot dead reckoning path.")
+            return
+        v, w = msg.linear.x, msg.angular.z
+        
+
+        x = self.latest_gt_pose.pose.pose.position.x
+        y = self.latest_gt_pose.pose.pose.position.y
+        quat = [self.latest_gt_pose.pose.pose.orientation.x, 
+                self.latest_gt_pose.pose.pose.orientation.y, 
+                self.latest_gt_pose.pose.pose.orientation.z, 
+                self.latest_gt_pose.pose.pose.orientation.w]
+        _, _, theta = tf_transformations.euler_from_quaternion(quat)
+
+        # Get the current time from the node's clock
+        current_time = self.get_clock().now()
+        latest_gt_time = Time.from_msg(self.latest_gt_pose.header.stamp)
+        duration = current_time - latest_gt_time
+        dt = duration.nanoseconds / 1e9
+        
+        # Get deltas with diff drive model
+        dx = np.cos(theta) * v * dt
+        dy = np.sin(theta) * v *dt
+        dtheta = w * dt
+
+        pose_msg = PoseStamped()
+        pose_msg.header.stamp = self.get_clock().now().to_msg()
+        pose_msg.header.frame_id = 'base_footprint'
+        pose_msg.pose.position.x = x+dx
+        pose_msg.pose.position.y = y+dy
+        pose_msg.pose.orientation.z = theta+dtheta
+
+        self.dr_path.header.frame_id = 'base_footprint'
+        self.dr_path.header.stamp = self.get_clock().now().to_msg()
+        self.dr_path.poses.append(pose_msg) # type: ignore
+        self.dr_path_pub.publish(self.dr_path)
 
     def plot_gps(self, msg: Pose2D):
         """
