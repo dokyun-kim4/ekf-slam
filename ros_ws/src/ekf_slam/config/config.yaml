@@ -1,0 +1,28 @@
+beacon_node:
+  ros__parameters:
+    beacon_ids: [1, 2, 3]
+    beacon_x_pos: [1.0, 3.0, -0.5]
+    beacon_y_pos: [1.5, -1.5, -1.0]
+    range_noise: 0.1
+    range_prop_noise: 0.05
+    bearing_noise: 0.08
+    max_range: 2.5
+    interval: 2.0
+
+# noise_injector:
+#   motor:
+#     linear_noise: 0.1
+#     angular_noise: 0.05
+#     interval: 0.2
+  
+#   encoder:
+#     linear_noise: 0.05
+#     linear_noise_ratio: 0.01
+#     angular_noise: 0.02
+#     angular_noise_ratio: 0.1
+#     interval: 0.2
+
+#   gps:
+#     x_noise: 0.1
+#     y_noise: 0.1
+#     interval: 1.0
