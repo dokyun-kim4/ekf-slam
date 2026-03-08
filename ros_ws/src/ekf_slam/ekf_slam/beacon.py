@@ -8,6 +8,7 @@ Data published here has no noise, as that will be handled by the NoiseInjector n
 
 import rclpy
 from rclpy.node import Node
+from rclpy.parameter import Parameter
 from nav_msgs.msg import Odometry
 from ekf_interfaces.msg import BeaconData # type: ignore
 import tf_transformations
@@ -88,16 +89,21 @@ class BeaconNode(Node):
     """
     def __init__(self):
         """Initializes the node, defines the beacons, and sets up publishers/subscribers."""
-        super().__init__('beacon_node')
+        # Allow reading arbitrarily structured YAML files dynamically 
+        super().__init__('beacon_node', allow_undeclared_parameters=True, automatically_declare_parameters_from_overrides=True)
 
-        self.beacon_interval = 2.0  # seconds
+        self.beacon_ids = self.get_parameter_or("beacon_ids", Parameter("beacon_ids", Parameter.Type.INTEGER_ARRAY, [1, 2, 3])).value
+        self.beacon_x_pos = self.get_parameter_or("beacon_x_pos", Parameter("beacon_x_pos", Parameter.Type.DOUBLE_ARRAY, [1.0, -1.0, -2.0])).value
+        self.beacon_y_pos = self.get_parameter_or("beacon_y_pos", Parameter("beacon_y_pos", Parameter.Type.DOUBLE_ARRAY, [1.0, 1.5, 2.0])).value
+        self.range_noise = self.get_parameter_or("range_noise", Parameter("range_noise", Parameter.Type.DOUBLE, 0.1)).value
+        self.range_prop_noise = self.get_parameter_or("range_prop_noise", Parameter("range_prop_noise", Parameter.Type.DOUBLE, 0.05)).value
+        self.bearing_noise = self.get_parameter_or("bearing_noise", Parameter("bearing_noise", Parameter.Type.DOUBLE, 0.08)).value
+        self.max_range = self.get_parameter_or("max_range", Parameter("max_range", Parameter.Type.DOUBLE, 2.5)).value
+        self.interval = self.get_parameter_or("interval", Parameter("interval", Parameter.Type.DOUBLE, 2.0)).value
 
-        # This will be configurable
-        self.beacons = [
-            Beacon(1, 1.0, 1.0),  
-            Beacon(2, -1.0, 1.0), 
-            Beacon(3, -2.0, -2.0),
-        ]
+        beacon_info = zip(self.beacon_ids, self.beacon_x_pos, self.beacon_y_pos) # type: ignore
+        self.beacons = [Beacon(beacon_id, x, y) for beacon_id, x, y in beacon_info]
+
         self.robot_pose = None # x,y,theta
 
         # Setup spawn entity client
@@ -106,7 +112,7 @@ class BeaconNode(Node):
 
         self.gt_sub = self.create_subscription(Odometry, '/ground_truth' , self.pose_callback, 10)
         self.beacon_pub = self.create_publisher(BeaconData, '/beacon_measurements', 10)
-        self.timer = self.create_timer(self.beacon_interval, self.beacon_callback)
+        self.timer = self.create_timer(self.interval, self.beacon_callback) # type: ignore
 
     def spawn_beacons(self):
         """
