@@ -26,7 +26,7 @@ class PathVizNode(Node):
         
         # Create subscribers for the different topics to use for path generation
         self.create_subscription(Odometry, '/ground_truth', self.plot_gt, 10)
-        self.create_subscription(Twist, '/encoder_vel', self.plot_dead_reckoning, 10)
+        self.create_subscription(Twist, '/encoder_noisy', self.plot_dead_reckoning, 10)
         self.create_subscription(Pose2D, '/gps_noisy', self.plot_gps, 10)
         self.create_subscription(Pose2D, '/ekf_prediction', self.plot_ekf, 10)
 

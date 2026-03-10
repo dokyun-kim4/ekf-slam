@@ -17,8 +17,7 @@ class EKFSLAMNode(Node):
         self.GPS_Y_NOISE = 0.1 # m
 
         # Run predict step whenever we have new control input
-        self.create_subscription(Twist, '/encoder_vel', self.ekf_predict, 10)
-
+        self.create_subscription(Twist, '/encoder_noisy', self.ekf_predict, 10)
         # Run update step whenever we get observation from beacon or GPS
         self.create_subscription(BeaconData, '/beacon_noisy', self.ekf_update_beacon, 10)
         self.create_subscription(Pose2D, '/gps_noisy', self.ekf_update_gps, 10)
