@@ -53,7 +53,7 @@ class PathVizNode(Node):
         pose_msg = PoseStamped()
         # Convert Odometry message to Pose 
         pose_msg.header.stamp = self.get_clock().now().to_msg()
-        pose_msg.header.frame_id = 'base_footprint'
+        pose_msg.header.frame_id = 'odom'
         pose_msg.pose.position.x = msg.pose.pose.position.x
         pose_msg.pose.position.y = msg.pose.pose.position.y
 
@@ -65,7 +65,7 @@ class PathVizNode(Node):
         pose_msg.pose.orientation.z = yaw
 
         # Set the frame_id for the Path message
-        self.gt_path.header.frame_id = 'base_footprint'
+        self.gt_path.header.frame_id = 'odom'
         self.gt_path.header.stamp = self.get_clock().now().to_msg()
         self.gt_path.poses.append(pose_msg) # type: ignore
         self.gt_path_pub.publish(self.gt_path)
@@ -137,12 +137,12 @@ class PathVizNode(Node):
 
         pose_msg = PoseStamped()
         pose_msg.header.stamp = current_time.to_msg()
-        pose_msg.header.frame_id = 'base_footprint'
+        pose_msg.header.frame_id = 'odom'
         pose_msg.pose.position.x = new_x
         pose_msg.pose.position.y = new_y
         pose_msg.pose.orientation.z = new_theta
 
-        self.dr_path.header.frame_id = 'base_footprint'
+        self.dr_path.header.frame_id = 'odom'
         self.dr_path.header.stamp = current_time.to_msg()
         self.dr_path.poses.append(pose_msg) # type: ignore
         self.dr_path_pub.publish(self.dr_path)
@@ -160,12 +160,12 @@ class PathVizNode(Node):
         """
         pose_msg = PoseStamped()
         pose_msg.header.stamp = self.get_clock().now().to_msg()
-        pose_msg.header.frame_id = 'base_footprint'
+        pose_msg.header.frame_id = 'odom'
         pose_msg.pose.position.x = msg.x
         pose_msg.pose.position.y = msg.y
 
         # Set the frame_id for the Path message
-        self.gps_path.header.frame_id = 'base_footprint'
+        self.gps_path.header.frame_id = 'odom'
         self.gps_path.header.stamp = self.get_clock().now().to_msg()
         self.gps_path.poses.append(pose_msg) # type: ignore
         self.gps_path_pub.publish(self.gps_path)
@@ -173,13 +173,13 @@ class PathVizNode(Node):
     def plot_ekf(self, msg: Pose2D):
         pose_msg = PoseStamped()
         pose_msg.header.stamp = self.get_clock().now().to_msg()
-        pose_msg.header.frame_id = 'base_footprint'
+        pose_msg.header.frame_id = 'odom'
         pose_msg.pose.position.x = msg.x
         pose_msg.pose.position.y = msg.y
         pose_msg.pose.orientation.z = msg.theta
 
         # Set the frame_id for the Path message
-        self.ekf_path.header.frame_id = 'base_footprint'
+        self.ekf_path.header.frame_id = 'odom'
         self.ekf_path.header.stamp = self.get_clock().now().to_msg()
         self.ekf_path.poses.append(pose_msg) # type: ignore
         self.ekf_path_pub.publish(self.ekf_path)
