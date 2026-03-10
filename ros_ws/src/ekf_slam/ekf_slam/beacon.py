@@ -10,10 +10,13 @@ import rclpy
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 from nav_msgs.msg import Odometry
-from ekf_interfaces.msg import BeaconData # type: ignore
+from ekf_interfaces.msg import BeaconData
 import tf_transformations
-from math import atan2
 from gazebo_msgs.srv import SpawnEntity
+
+from math import atan2
+import random
+from typing import List, cast
 
 BEACON_SDF = """
 <?xml version="1.0" ?>
@@ -92,16 +95,16 @@ class BeaconNode(Node):
         # Allow reading arbitrarily structured YAML files dynamically 
         super().__init__('beacon_node', allow_undeclared_parameters=True, automatically_declare_parameters_from_overrides=True)
 
-        self.beacon_ids = self.get_parameter_or("beacon_ids", Parameter("beacon_ids", Parameter.Type.INTEGER_ARRAY, [1, 2, 3])).value
-        self.beacon_x_pos = self.get_parameter_or("beacon_x_pos", Parameter("beacon_x_pos", Parameter.Type.DOUBLE_ARRAY, [1.0, -1.0, -2.0])).value
-        self.beacon_y_pos = self.get_parameter_or("beacon_y_pos", Parameter("beacon_y_pos", Parameter.Type.DOUBLE_ARRAY, [1.0, 1.5, 2.0])).value
-        self.range_noise = self.get_parameter_or("range_noise", Parameter("range_noise", Parameter.Type.DOUBLE, 0.1)).value
-        self.range_prop_noise = self.get_parameter_or("range_prop_noise", Parameter("range_prop_noise", Parameter.Type.DOUBLE, 0.05)).value
-        self.bearing_noise = self.get_parameter_or("bearing_noise", Parameter("bearing_noise", Parameter.Type.DOUBLE, 0.08)).value
-        self.max_range = self.get_parameter_or("max_range", Parameter("max_range", Parameter.Type.DOUBLE, 2.5)).value
-        self.interval = self.get_parameter_or("interval", Parameter("interval", Parameter.Type.DOUBLE, 2.0)).value
+        self.beacon_ids = cast(List[int], self.get_parameter_or("beacon_ids", Parameter("beacon_ids", Parameter.Type.INTEGER_ARRAY, [1, 2, 3])).value)
+        self.beacon_x_pos = cast(List[float], self.get_parameter_or("beacon_x_pos", Parameter("beacon_x_pos", Parameter.Type.DOUBLE_ARRAY, [1.0, -1.0, -2.0])).value)
+        self.beacon_y_pos = cast(List[float], self.get_parameter_or("beacon_y_pos", Parameter("beacon_y_pos", Parameter.Type.DOUBLE_ARRAY, [1.0, 1.5, 2.0])).value)
+        self.RANGE_NOISE = cast(float, self.get_parameter_or("range_noise", Parameter("range_noise", Parameter.Type.DOUBLE, 0.1)).value)
+        self.RANGE_PROP_NOISE = cast(float, self.get_parameter_or("range_prop_noise", Parameter("range_prop_noise", Parameter.Type.DOUBLE, 0.05)).value)
+        self.BEARING_NOISE = cast(float, self.get_parameter_or("bearing_noise", Parameter("bearing_noise", Parameter.Type.DOUBLE, 0.08)).value)
+        self.MAX_RANGE = cast(float, self.get_parameter_or("max_range", Parameter("max_range", Parameter.Type.DOUBLE, 2.5)).value)
+        self.INTERVAL = cast(float, self.get_parameter_or("interval", Parameter("interval", Parameter.Type.DOUBLE, 2.0)).value)
 
-        beacon_info = zip(self.beacon_ids, self.beacon_x_pos, self.beacon_y_pos) # type: ignore
+        beacon_info = zip(self.beacon_ids, self.beacon_x_pos, self.beacon_y_pos)
         self.beacons = [Beacon(beacon_id, x, y) for beacon_id, x, y in beacon_info]
 
         self.robot_pose = None # x,y,theta
@@ -111,8 +114,9 @@ class BeaconNode(Node):
         self.spawn_beacons()
 
         self.gt_sub = self.create_subscription(Odometry, '/ground_truth' , self.pose_callback, 10)
-        self.beacon_pub = self.create_publisher(BeaconData, '/beacon_measurements', 10)
-        self.timer = self.create_timer(self.interval, self.beacon_callback) # type: ignore
+        self.beacon_gt_pub = self.create_publisher(BeaconData, '/beacon_ground_truth', 10)
+        self.beacon_noisy_pub = self.create_publisher(BeaconData, '/beacon_noisy', 10)
+        self.timer = self.create_timer(self.INTERVAL, self.beacon_callback)
 
     def spawn_beacons(self):
         """
@@ -159,17 +163,28 @@ class BeaconNode(Node):
         Periodically computes and publishes the theoretical range and bearing 
         from the robot to all known beacons.
         """
-        msg = BeaconData()
+        gt_msg = BeaconData()
+        noisy_msg = BeaconData()
 
         if self.robot_pose is None:
             return
 
         for beacon in self.beacons:
             range, bearing, id = beacon.get_br(self.robot_pose)
-            msg.ids.append(id)
-            msg.ranges.append(range)
-            msg.bearings.append(bearing)
-            self.beacon_pub.publish(msg)
+
+            # Publish ground truth for logging
+            gt_msg.ids.append(id)
+            gt_msg.ranges.append(range)
+            gt_msg.bearings.append(bearing)
+            self.beacon_gt_pub.publish(gt_msg)
+
+            # Publish noisy measurements, also skip beacons that are out of range
+            if range > self.MAX_RANGE:
+                continue
+            noisy_msg.ids.append(id)
+            noisy_msg.ranges.append(random.gauss(range, self.RANGE_NOISE + self.RANGE_PROP_NOISE * range))
+            noisy_msg.bearings.append(random.gauss(bearing, self.BEARING_NOISE))
+            self.beacon_noisy_pub.publish(noisy_msg)
 
 def main(args=None):
     rclpy.init(args=args)
