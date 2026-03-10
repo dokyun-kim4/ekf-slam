@@ -26,11 +26,13 @@ class PathVizNode(Node):
         
         # Create subscribers for the different topics to use for path generation
         self.create_subscription(Odometry, '/ground_truth', self.plot_gt, 10)
-        self.create_subscription(Twist, '/cmd_vel_noisy', self.plot_dead_reckoning, 10)
+        self.create_subscription(Twist, '/encoder_vel', self.plot_dead_reckoning, 10)
         self.create_subscription(Pose2D, '/gps_noisy', self.plot_gps, 10)
-        self.create_subscription(Path, '/predicted_pose', self.plot_ekf, 10)
+        self.create_subscription(Pose2D, '/ekf_prediction', self.plot_ekf, 10)
 
         self.latest_gt_pose = None
+        self.last_twist_time = None
+        self.last_twist_pose = None  # Track last dead reckoning pose
         self.gt_path = Path()
         self.dr_path = Path()
         self.gps_path = Path()
@@ -77,40 +79,71 @@ class PathVizNode(Node):
         Args:
             msg (Twist): Twist message containing the velocity commands for the robot.
         """
-        if self.latest_gt_pose is None:
-            self.get_logger().warn("No ground truth pose received yet, cannot plot dead reckoning path.")
-            return
-        v, w = msg.linear.x, msg.angular.z
-        
-
-        x = self.latest_gt_pose.pose.pose.position.x
-        y = self.latest_gt_pose.pose.pose.position.y
-        quat = [self.latest_gt_pose.pose.pose.orientation.x, 
-                self.latest_gt_pose.pose.pose.orientation.y, 
-                self.latest_gt_pose.pose.pose.orientation.z, 
-                self.latest_gt_pose.pose.pose.orientation.w]
-        _, _, theta = tf_transformations.euler_from_quaternion(quat)
-
-        # Get the current time from the node's clock
         current_time = self.get_clock().now()
-        latest_gt_time = Time.from_msg(self.latest_gt_pose.header.stamp)
-        duration = current_time - latest_gt_time
+        
+        # Initialize tracking variables on first message
+        if self.last_twist_time is None:
+            # Initialize with ground truth pose if available, otherwise origin
+            if self.latest_gt_pose is not None:
+                x = self.latest_gt_pose.pose.pose.position.x
+                y = self.latest_gt_pose.pose.pose.position.y
+                quat = [self.latest_gt_pose.pose.pose.orientation.x, 
+                        self.latest_gt_pose.pose.pose.orientation.y, 
+                        self.latest_gt_pose.pose.pose.orientation.z, 
+                        self.latest_gt_pose.pose.pose.orientation.w]
+                _, _, theta = tf_transformations.euler_from_quaternion(quat)
+            else:
+                x, y, theta = 0.0, 0.0, 0.0
+                
+            self.last_twist_pose = [x, y, theta]
+            self.last_twist_time = current_time
+            self.get_logger().info(f"Initializing dead reckoning at ({x:.3f}, {y:.3f}, {theta:.3f})")
+            return
+        
+        # Calculate dt from message timing
+        duration = current_time - self.last_twist_time
         dt = duration.nanoseconds / 1e9
         
-        # Get deltas with diff drive model
-        dx = np.cos(theta) * v * dt
-        dy = np.sin(theta) * v *dt
-        dtheta = w * dt
+        # Guard against unreasonable dt values
+        if dt <= 0 or dt > 0.5:  # If dt is negative or too large (> 0.5 second)
+            self.get_logger().warn(f"Invalid dt value: {dt} seconds, skipping update")
+            return
+            
+        v, w = msg.linear.x, msg.angular.z
+        x, y, theta = self.last_twist_pose # type: ignore
+        
+        # Use exact analytical differential drive model
+        if abs(w) < 1e-6:  # Nearly straight line motion
+            dx = v * dt * np.cos(theta)
+            dy = v * dt * np.sin(theta)
+            dtheta = 0.0
+        else:
+            r = v / w
+            dx = -r * np.sin(theta) + r * np.sin(theta + w * dt)
+            dy = r * np.cos(theta) - r * np.cos(theta + w * dt)
+            dtheta = w * dt
+        
+        # Update pose
+        new_x = x + dx
+        new_y = y + dy  
+        new_theta = theta + dtheta
+        
+        # Wrap angle to [-pi, pi] to match typical robot conventions
+        new_theta = np.arctan2(np.sin(new_theta), np.cos(new_theta))
+            
+        # Store updated pose and time for next iteration        
+        self.last_twist_pose = [new_x, new_y, new_theta]        
+        self.last_twist_time = current_time
 
         pose_msg = PoseStamped()
-        pose_msg.header.stamp = self.get_clock().now().to_msg()
+        pose_msg.header.stamp = current_time.to_msg()
         pose_msg.header.frame_id = 'base_footprint'
-        pose_msg.pose.position.x = x+dx
-        pose_msg.pose.position.y = y+dy
-        pose_msg.pose.orientation.z = theta+dtheta
+        pose_msg.pose.position.x = new_x
+        pose_msg.pose.position.y = new_y
+        pose_msg.pose.orientation.z = new_theta
 
         self.dr_path.header.frame_id = 'base_footprint'
-        self.dr_path.header.stamp = self.get_clock().now().to_msg()
+        self.dr_path.header.stamp = current_time.to_msg()
         self.dr_path.poses.append(pose_msg) # type: ignore
         self.dr_path_pub.publish(self.dr_path)
 
@@ -137,8 +170,19 @@ class PathVizNode(Node):
         self.gps_path.poses.append(pose_msg) # type: ignore
         self.gps_path_pub.publish(self.gps_path)
 
-    def plot_ekf(self, msg):
-        pass
+    def plot_ekf(self, msg: Pose2D):
+        pose_msg = PoseStamped()
+        pose_msg.header.stamp = self.get_clock().now().to_msg()
+        pose_msg.header.frame_id = 'base_footprint'
+        pose_msg.pose.position.x = msg.x
+        pose_msg.pose.position.y = msg.y
+        pose_msg.pose.orientation.z = msg.theta
+
+        # Set the frame_id for the Path message
+        self.ekf_path.header.frame_id = 'base_footprint'
+        self.ekf_path.header.stamp = self.get_clock().now().to_msg()
+        self.ekf_path.poses.append(pose_msg) # type: ignore
+        self.ekf_path_pub.publish(self.ekf_path)
 
 
 def main(args=None):
