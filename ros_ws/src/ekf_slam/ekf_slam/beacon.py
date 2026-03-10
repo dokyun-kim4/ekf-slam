@@ -176,6 +176,8 @@ class BeaconNode(Node):
             gt_msg.ids.append(id)
             gt_msg.ranges.append(range)
             gt_msg.bearings.append(bearing)
+            gt_msg.x_poses.append(beacon.x)
+            gt_msg.y_poses.append(beacon.y)
             self.beacon_gt_pub.publish(gt_msg)
 
             # Publish noisy measurements, also skip beacons that are out of range
@@ -184,6 +186,8 @@ class BeaconNode(Node):
             noisy_msg.ids.append(id)
             noisy_msg.ranges.append(random.gauss(range, self.RANGE_NOISE + self.RANGE_PROP_NOISE * range))
             noisy_msg.bearings.append(random.gauss(bearing, self.BEARING_NOISE))
+            noisy_msg.x_poses.append(beacon.x)
+            noisy_msg.y_poses.append(beacon.y)
             self.beacon_noisy_pub.publish(noisy_msg)
 
 def main(args=None):
