@@ -169,7 +169,18 @@ class EKFSLAMNode(Node):
         """
         EKF update step triggered by new GPS measurements.
         """
-        pass
+        z = np.array([[msg.x], [msg.y]])
+        H = np.zeros((2, 3 + 3 * self.num_beacons))
+        H[0:2, 0:2] = np.eye(2)
+
+        R = np.diag([self.GPS_X_NOISE**2, self.GPS_Y_NOISE**2])
+
+        y = z - H @ self.x
+        S = H @ self.P @ H.T + R
+        K = self.P @ H.T @ np.linalg.inv(S)
+        self.x = self.x + K @ y
+        self.x[2, 0] = self.wrap_angle(self.x[2, 0])
+        self.P = (np.eye(3 + 3 * self.num_beacons) - K @ H) @ self.P
 
 def main(args=None):
     """
