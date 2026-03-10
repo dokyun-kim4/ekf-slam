@@ -3,7 +3,6 @@ from rclpy.node import Node
 from rclpy.parameter import Parameter
 from geometry_msgs.msg import Twist, Pose2D
 from nav_msgs.msg import Odometry
-from ekf_interfaces.msg import BeaconData
 import random
 from typing import Optional, cast
 
@@ -58,15 +57,6 @@ class NoiseInjector(Node):
             msg (Odometry): The incoming ground truth GPS odometry message
         """
         self.latest_gps_gt = msg
-    
-    def beacon_callback(self, msg: BeaconData):
-        """
-        Updates the latest ground truth beacon measurements
-
-        Args:
-            msg (BeaconData): The incoming ground truth beacon data message
-        """
-        self.latest_beacon_gt = msg
     
     def cmd_vel_callback(self, msg: Twist):
         """
