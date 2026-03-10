@@ -29,6 +29,13 @@ def generate_launch_description():
         ),
 
         Node(
+            package='ekf_slam',
+            executable='ekf_slam',
+            arguments=['--ros-args', '--params-file', ekf_config_file],
+            parameters=[{'use_sim_time': True}]
+        ),
+
+        Node(
             package='rviz2',
             executable='rviz2',
             name='rviz2',

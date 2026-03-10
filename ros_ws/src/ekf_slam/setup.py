@@ -25,7 +25,8 @@ setup(
         'console_scripts': [
             'noise_injector = ekf_slam.noise_injector:main',
             'beacon = ekf_slam.beacon:main',
-            'path_viz = ekf_slam.path_viz:main'
+            'path_viz = ekf_slam.path_viz:main',
+            'ekf_slam = ekf_slam.ekf_slam:main',
         ],
     },
 )
