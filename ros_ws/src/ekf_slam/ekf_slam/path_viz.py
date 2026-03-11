@@ -7,9 +7,10 @@ This node is responsible for visualizing the different paths of the EKF SLAM out
 """
 import rclpy
 from rclpy.node import Node
-from rclpy.time import Time
 from nav_msgs.msg import Path, Odometry
-from geometry_msgs.msg import Pose2D, PoseStamped, Twist
+from geometry_msgs.msg import Pose2D, PoseStamped, Twist, PoseWithCovarianceStamped
+from visualization_msgs.msg import Marker, MarkerArray
+from ekf_interfaces.msg import BeaconData
 import tf_transformations
 import numpy as np
 
@@ -23,12 +24,14 @@ class PathVizNode(Node):
         self.dr_path_pub = self.create_publisher(Path, '/dead_reckoning_path', 10)
         self.gps_path_pub = self.create_publisher(Path, '/gps_path', 10)
         self.ekf_path_pub = self.create_publisher(Path, '/ekf_slam_path', 10)
+        self.beacon_viz_pub = self.create_publisher(MarkerArray, '/beacon_viz', 10)
         
         # Create subscribers for the different topics to use for path generation
         self.create_subscription(Odometry, '/ground_truth', self.plot_gt, 10)
         self.create_subscription(Twist, '/encoder_noisy', self.plot_dead_reckoning, 10)
         self.create_subscription(Pose2D, '/gps_noisy', self.plot_gps, 10)
-        self.create_subscription(Pose2D, '/ekf_prediction', self.plot_ekf, 10)
+        self.create_subscription(PoseWithCovarianceStamped, '/ekf_prediction', self.plot_ekf, 10)
+        self.create_subscription(BeaconData, '/beacon_ground_truth', self.plot_beacons, 10)
 
         self.latest_gt_pose = None
         self.last_twist_time = None
@@ -170,13 +173,20 @@ class PathVizNode(Node):
         self.gps_path.poses.append(pose_msg) # type: ignore
         self.gps_path_pub.publish(self.gps_path)
 
-    def plot_ekf(self, msg: Pose2D):
+    def plot_ekf(self, msg: PoseWithCovarianceStamped):
         pose_msg = PoseStamped()
         pose_msg.header.stamp = self.get_clock().now().to_msg()
         pose_msg.header.frame_id = 'odom'
-        pose_msg.pose.position.x = msg.x
-        pose_msg.pose.position.y = msg.y
-        pose_msg.pose.orientation.z = msg.theta
+        pose_msg.pose.position.x = msg.pose.pose.position.x
+        pose_msg.pose.position.y = msg.pose.pose.position.y
+
+        # need to convert orientation to euler angle
+        _, _, pose_msg.pose.orientation.z = tf_transformations.euler_from_quaternion([
+            msg.pose.pose.orientation.x,
+            msg.pose.pose.orientation.y,
+            msg.pose.pose.orientation.z,
+            msg.pose.pose.orientation.w
+        ])
 
         # Set the frame_id for the Path message
         self.ekf_path.header.frame_id = 'odom'
@@ -184,6 +194,45 @@ class PathVizNode(Node):
         self.ekf_path.poses.append(pose_msg) # type: ignore
         self.ekf_path_pub.publish(self.ekf_path)
 
+    def plot_beacons(self, msg: BeaconData):
+        """
+        Plot the beacons as cylinder markers in RViz.
+        """
+        marker_array = MarkerArray()
+        stamp = self.get_clock().now().to_msg()
+        
+        for i, beacon_id in enumerate(msg.ids):
+            marker = Marker()
+            marker.header.frame_id = 'odom'
+            marker.header.stamp = stamp
+            marker.ns = 'beacons'
+            marker.id = beacon_id
+            marker.type = Marker.CYLINDER
+            marker.action = Marker.ADD
+            
+            marker.pose.position.x = float(msg.x_poses[i])
+            marker.pose.position.y = float(msg.y_poses[i])
+            marker.pose.position.z = 0.5
+            
+            # Default orientation
+            marker.pose.orientation.x = 0.0
+            marker.pose.orientation.y = 0.0
+            marker.pose.orientation.z = 0.0
+            marker.pose.orientation.w = 1.0
+            
+            marker.scale.x = 0.2
+            marker.scale.y = 0.2
+            marker.scale.z = 1.0
+            
+            # Make the beacons visible with a distinct color (e.g., bright orange/yellow)
+            marker.color.r = 1.0
+            marker.color.g = 0.65
+            marker.color.b = 0.0
+            marker.color.a = 1.0
+            
+            marker_array.markers.append(marker) # type: ignore
+            
+        self.beacon_viz_pub.publish(marker_array)
 
 def main(args=None):
     rclpy.init(args=args)
