@@ -2,9 +2,11 @@ import math
 
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import Twist, Pose2D
+from tf_transformations import quaternion_from_euler
+from geometry_msgs.msg import Twist, Pose2D, PoseWithCovarianceStamped
 from ekf_interfaces.msg import BeaconData
 import numpy as np
+from math import atan2, sqrt
 
 class EKFSLAMNode(Node):
     """
@@ -16,6 +18,10 @@ class EKFSLAMNode(Node):
         self.GPS_X_NOISE = 0.1 # m
         self.GPS_Y_NOISE = 0.1 # m
 
+        self.RANGE_NOISE = 0.1
+        self.RANGE_PROP_NOISE = 0.05
+        self.BEARING_NOISE = 0.08
+
         # Run predict step whenever we have new control input
         self.create_subscription(Twist, '/encoder_noisy', self.ekf_predict, 10)
         # Run update step whenever we get observation from beacon or GPS
@@ -23,7 +29,7 @@ class EKFSLAMNode(Node):
         self.create_subscription(Pose2D, '/gps_noisy', self.ekf_update_gps, 10)
 
         # Publish the current state estimate for visualization
-        self.ekf_pub = self.create_publisher(Pose2D, '/ekf_prediction', 10)
+        self.ekf_pub = self.create_publisher(PoseWithCovarianceStamped, '/ekf_prediction', 10)
 
         self.num_beacons = 3
         # Dynamic dt calculation - will be computed from message timing
@@ -153,17 +159,122 @@ class EKFSLAMNode(Node):
         # Covariance prediction
         self.P = G_t @ self.P @ G_t.T + self.M.T @ self.get_Q() @ self.M
 
-        pose_msg = Pose2D()
-        pose_msg.x = float(self.x[0, 0])
-        pose_msg.y = float(self.x[1, 0])
-        pose_msg.theta = float(self.x[2, 0])
+        pose_msg = PoseWithCovarianceStamped()
+        pose_msg.header.stamp = current_time.to_msg()
+        pose_msg.header.frame_id = 'odom'
+        pose_msg.pose.pose.position.x = float(self.x[0, 0])
+        pose_msg.pose.pose.position.y = float(self.x[1, 0])
+
+        # need to convert back to quaternion
+        q = quaternion_from_euler(0, 0, float(self.x[2, 0]))
+        pose_msg.pose.pose.orientation.x = q[0]
+        pose_msg.pose.pose.orientation.y = q[1]
+        pose_msg.pose.pose.orientation.z = q[2]
+        pose_msg.pose.pose.orientation.w = q[3]
+
+        # self.P only has x,y theta but we need a 6 x 6
+        P_66 = np.zeros((6, 6))
+        P_66[0:2, 0:2] = self.P[0:2, 0:2] # xy covariance
+        P_66[5,5] = self.P[2,2] # theta variance
+        P_66[5, 0:2] = self.P[2, 0:2] # theta-xy covariance
+        P_66[0:2, 5] = self.P[0:2, 2] # theta-xy covariance
+
+        pose_msg.pose.covariance = P_66.flatten()
         self.ekf_pub.publish(pose_msg)
-    
+
+
     def ekf_update_beacon(self, msg: BeaconData):
         """
         EKF update step triggered by new beacon measurements.
         """
-        pass
+
+        # Note that our z vector has [range, bearing, id] in this order
+        all_measurements = [
+                                np.array(z_flat)[:, None] for z_flat in zip(
+                                    msg.ranges, msg.bearings, msg.ids
+                                )
+                            ]
+        
+        beacon_poses = zip(msg.x_poses, msg.y_poses)
+
+        # We need to iterate through the list of beacon measurements,
+        # and update state using each measurement.
+        for z_t, beacon_pos in zip(all_measurements, beacon_poses):
+            id = int(z_t[2,0])
+            x_t, y_t = self.x[0,0], self.x[1,0]
+            m_x, m_y = beacon_pos
+
+            # Compute sensor noise R
+            range_stdev = self.RANGE_NOISE + z_t[1,0] * self.RANGE_PROP_NOISE
+            bearing_stdev = self.BEARING_NOISE
+            R = np.diag([range_stdev, bearing_stdev, 0.001]) ** 2
+
+            # First, linearize the measurement function
+            q_t = (m_x - x_t)**2 + (m_y - y_t)**2
+            sq_t = sqrt(q_t)
+            delta_x = x_t - m_x
+            delta_y = y_t - m_y
+
+            h_t = np.array([
+                            [delta_x/sq_t, delta_y/sq_t, 0.0, -delta_x/sq_t, -delta_y/sq_t, 0.0],
+                            [-delta_y/q_t, delta_x/q_t, -1.0, delta_y/q_t, -delta_x/q_t, 0.0],
+                            [0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+            ])
+            
+            # Passthru matrix for current beacon
+            F = np.zeros((6, 3 + 3*self.num_beacons))
+            F[0:3, 0:3] = np.eye(3)
+
+            self.get_logger().info(f"id: {id}")
+            F[3:6, 3+3*(id-1):3+3*(id)] = np.eye(3)
+
+            # Measurement Jacobian
+            H_t = h_t @ F
+
+            # Compute innovation and Kalman Gain
+            S_t = H_t @ self.P @ H_t.T + R
+            K_t = self.P @ H_t.T @ np.linalg.inv(S_t)
+
+            # Compute Residual
+            self.get_logger().info(f"Current robot pose: x={x_t:.2f}, y={y_t:.2f}, theta={self.x[2,0]:.2f}")
+            self.get_logger().info(f"Beacon position: x={m_x:.2f}, y={m_y:.2f}")
+            self.get_logger().info(f"Expected measurement: range={sq_t:.2f}, bearing={self.wrap_angle(atan2(-delta_y, -delta_x) - self.x[2,0]):.2f}")
+            self.get_logger().info(f"Actual measurement: range={z_t[0,0]:.2f}, bearing={z_t[1,0]:.2f}")
+
+            y_t = z_t - np.array([
+                                    [sqrt(q_t)], 
+                                    [self.wrap_angle(atan2(-delta_y, -delta_x) - self.x[2,0])],
+                                    [id]
+                                ])
+            # Update State and Covariance
+            self.x += K_t @ y_t
+            self.x[2,0] = self.wrap_angle(self.x[2,0])
+            self.P = (np.eye(3 + 3*self.num_beacons) - K_t @ H_t) @ self.P
+
+        current_time = self.get_clock().now()
+        pose_msg = PoseWithCovarianceStamped()
+        pose_msg.header.stamp = current_time.to_msg()
+        pose_msg.header.frame_id = 'odom'
+        pose_msg.pose.pose.position.x = float(self.x[0, 0])
+        pose_msg.pose.pose.position.y = float(self.x[1, 0])
+
+        # need to convert back to quaternion
+        q = quaternion_from_euler(0, 0, float(self.x[2, 0]))
+        pose_msg.pose.pose.orientation.x = q[0]
+        pose_msg.pose.pose.orientation.y = q[1]
+        pose_msg.pose.pose.orientation.z = q[2]
+        pose_msg.pose.pose.orientation.w = q[3]
+
+        # self.P only has x,y theta but we need a 6 x 6
+        P_66 = np.zeros((6, 6))
+        P_66[0:2, 0:2] = self.P[0:2, 0:2] # xy covariance
+        P_66[5,5] = self.P[2,2] # theta variance
+        P_66[5, 0:2] = self.P[2, 0:2] # theta-xy covariance
+        P_66[0:2, 5] = self.P[0:2, 2] # theta-xy covariance
+
+        pose_msg.pose.covariance = P_66.flatten()
+        self.ekf_pub.publish(pose_msg)
+
 
     def ekf_update_gps(self, msg: Pose2D):
         """
@@ -181,6 +292,30 @@ class EKFSLAMNode(Node):
         self.x = self.x + K @ y
         self.x[2, 0] = self.wrap_angle(self.x[2, 0])
         self.P = (np.eye(3 + 3 * self.num_beacons) - K @ H) @ self.P
+
+        current_time = self.get_clock().now()
+        pose_msg = PoseWithCovarianceStamped()
+        pose_msg.header.stamp = current_time.to_msg()
+        pose_msg.header.frame_id = 'odom'
+        pose_msg.pose.pose.position.x = float(self.x[0, 0])
+        pose_msg.pose.pose.position.y = float(self.x[1, 0])
+
+        # need to convert back to quaternion
+        q = quaternion_from_euler(0, 0, float(self.x[2, 0]))
+        pose_msg.pose.pose.orientation.x = q[0]
+        pose_msg.pose.pose.orientation.y = q[1]
+        pose_msg.pose.pose.orientation.z = q[2]
+        pose_msg.pose.pose.orientation.w = q[3]
+
+        # self.P only has x,y theta but we need a 6 x 6
+        P_66 = np.zeros((6, 6))
+        P_66[0:2, 0:2] = self.P[0:2, 0:2] # xy covariance
+        P_66[5,5] = self.P[2,2] # theta variance
+        P_66[5, 0:2] = self.P[2, 0:2] # theta-xy covariance
+        P_66[0:2, 5] = self.P[0:2, 2] # theta-xy covariance
+
+        pose_msg.pose.covariance = P_66.flatten()
+        self.ekf_pub.publish(pose_msg)
 
 def main(args=None):
     """
