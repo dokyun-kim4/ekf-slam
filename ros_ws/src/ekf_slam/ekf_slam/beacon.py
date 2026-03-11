@@ -14,7 +14,7 @@ from ekf_interfaces.msg import BeaconData
 import tf_transformations
 from gazebo_msgs.srv import SpawnEntity
 
-from math import atan2
+from math import atan2, pi
 import random
 from typing import List, cast
 
@@ -144,6 +144,10 @@ class BeaconNode(Node):
             self.spawn_client.call_async(req)
             self.get_logger().info(f"Requested visual spawn for {name} at ({beacon.x}, {beacon.y})")
 
+
+    def wrap_angle(self, angle):
+        return (angle + pi) % (2 * pi) - pi
+
     def pose_callback(self,msg: Odometry):
         """
         Updates the internal robot pose based on ground truth odometry.
@@ -175,7 +179,7 @@ class BeaconNode(Node):
             # Publish ground truth for logging
             gt_msg.ids.append(id)
             gt_msg.ranges.append(range)
-            gt_msg.bearings.append(bearing)
+            gt_msg.bearings.append(self.wrap_angle(bearing))
             gt_msg.x_poses.append(beacon.x)
             gt_msg.y_poses.append(beacon.y)
             self.beacon_gt_pub.publish(gt_msg)
@@ -185,7 +189,7 @@ class BeaconNode(Node):
                 continue
             noisy_msg.ids.append(id)
             noisy_msg.ranges.append(random.gauss(range, self.RANGE_NOISE + self.RANGE_PROP_NOISE * range))
-            noisy_msg.bearings.append(random.gauss(bearing, self.BEARING_NOISE))
+            noisy_msg.bearings.append(self.wrap_angle(random.gauss(bearing, self.BEARING_NOISE)))
             noisy_msg.x_poses.append(beacon.x)
             noisy_msg.y_poses.append(beacon.y)
             self.beacon_noisy_pub.publish(noisy_msg)
