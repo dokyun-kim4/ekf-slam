@@ -10,6 +10,8 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['launch/ekf_slam.launch.py']),
+        ('share/' + package_name, ['launch/demo_with_bag.launch.py']),
+        ('share/' + package_name, ['launch/record_rosbag.launch.py']),
         ('share/' + package_name, ['rviz/config.rviz']),
         ('share/' + package_name, ['config/config.yaml']),
         ('share/' + package_name, ['package.xml']),
