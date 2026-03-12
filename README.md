@@ -1,6 +1,8 @@
 # EKF-SLAM Implementation with ROS2 and Gazebo
 **By Dokyun Kim**
 
+<img src="media/ekf-slam-demo.png" alt="EKF SLAM demo" width="400"/>
+
 This repository contains an implementation of the EKF SLAM algorithm using ROS2 and Gazebo. The learning objectives of this project was to improve understanding of the mathematical foundations of the EKF SLAM algorithm, as well as to gain practical experience in implementing it using popular tools like ROS2 and Gazebo. The simulation environment is built on top of the [Neato simulation](https://github.com/comprobo23/neato_packages) from Olin's CompRobo course.
 
 
