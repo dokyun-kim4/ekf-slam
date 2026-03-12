@@ -57,12 +57,12 @@ ros2 launch ekf_slam record_rosbag.launch
 ```bash
 ros2 run teleop_twist_keyboard teleop_twist_keyboard
 ```
-When you are ready to start recording, run the following script
+When you are ready to start recording, run the following script and start driving the robot around.
 ```
 cd /ekf-slam
 ./bag_record.sh <bag_name>
 ```
-This will store the bag file in `/ekf-slam/ros_ws/rosbag`. To run the EKF SLAM algorithm with the recorded bag file, use the following command:
+Press Ctrl + C to stop recording; This will store the bag file in `/ekf-slam/ros_ws/rosbag`. To run the EKF SLAM algorithm with the recorded bag file, use the following command:
 ```bash
 ros2 launch ekf_slam demo_with_bag.launch.py
 ```
