@@ -1,34 +1,33 @@
 from setuptools import find_packages, setup
 
-package_name = 'ekf_slam'
+package_name = "ekf_slam"
 
 setup(
     name=package_name,
-    version='0.0.0',
-    packages=find_packages(exclude=['test']),
+    version="0.0.0",
+    packages=find_packages(exclude=["test"]),
     data_files=[
-        ('share/ament_index/resource_index/packages',
-            ['resource/' + package_name]),
-        ('share/' + package_name, ['launch/ekf_slam.launch.py']),
-        ('share/' + package_name, ['launch/demo_with_bag.launch.py']),
-        ('share/' + package_name, ['launch/record_rosbag.launch.py']),
-        ('share/' + package_name, ['rviz/config.rviz']),
-        ('share/' + package_name, ['config/config.yaml']),
-        ('share/' + package_name, ['package.xml']),
+        ("share/ament_index/resource_index/packages", ["resource/" + package_name]),
+        ("share/" + package_name, ["launch/ekf_slam.launch.py"]),
+        ("share/" + package_name, ["launch/demo_with_bag.launch.py"]),
+        ("share/" + package_name, ["launch/record_rosbag.launch.py"]),
+        ("share/" + package_name, ["rviz/config.rviz"]),
+        ("share/" + package_name, ["config/config.yaml"]),
+        ("share/" + package_name, ["package.xml"]),
     ],
-    install_requires=['setuptools'],
+    install_requires=["setuptools"],
     zip_safe=True,
-    maintainer='root',
-    maintainer_email='donny5557@gmail.com',
-    description='TODO: Package description',
-    license='TODO: License declaration',
-    tests_require=['pytest'],
+    maintainer="root",
+    maintainer_email="donny5557@gmail.com",
+    description="TODO: Package description",
+    license="TODO: License declaration",
+    tests_require=["pytest"],
     entry_points={
-        'console_scripts': [
-            'noise_injector = ekf_slam.noise_injector:main',
-            'beacon = ekf_slam.beacon:main',
-            'path_viz = ekf_slam.path_viz:main',
-            'ekf_slam = ekf_slam.ekf_slam:main',
+        "console_scripts": [
+            "noise_injector = ekf_slam.noise_injector:main",
+            "beacon = ekf_slam.beacon:main",
+            "path_viz = ekf_slam.path_viz:main",
+            "ekf_slam = ekf_slam.ekf_slam:main",
         ],
     },
 )
