@@ -25,6 +25,7 @@ class PathVizNode(Node):
         self.gps_path_pub = self.create_publisher(Path, '/gps_path', 10)
         self.ekf_path_pub = self.create_publisher(Path, '/ekf_slam_path', 10)
         self.beacon_viz_pub = self.create_publisher(MarkerArray, '/beacon_viz', 10)
+        self.ekf_beacon_viz_pub = self.create_publisher(MarkerArray, '/ekf_beacon_viz', 10)
         
         # Create subscribers for the different topics to use for path generation
         self.create_subscription(Odometry, '/ground_truth', self.plot_gt, 10)
@@ -32,6 +33,7 @@ class PathVizNode(Node):
         self.create_subscription(Pose2D, '/gps_noisy', self.plot_gps, 10)
         self.create_subscription(PoseWithCovarianceStamped, '/ekf_prediction', self.plot_ekf, 10)
         self.create_subscription(BeaconData, '/beacon_ground_truth', self.plot_beacons, 10)
+        self.create_subscription(PoseWithCovarianceStamped, '/ekf_beacon_prediction', self.plot_ekf_beacons, 10)
 
         self.latest_gt_pose = None
         self.last_twist_time = None
@@ -233,6 +235,53 @@ class PathVizNode(Node):
             marker_array.markers.append(marker) # type: ignore
             
         self.beacon_viz_pub.publish(marker_array)
+
+    def plot_ekf_beacons(self, msg: PoseWithCovarianceStamped):
+        """
+        Plot the EKF estimated beacons as cylinder markers in RViz.
+        We accumulate the beacon predictions into a MarkerArray since they are published individually.
+        """
+        if not hasattr(self, 'ekf_beacon_markers'):
+            self.ekf_beacon_markers = {}
+            
+        # Extract beacon ID from frame_id (e.g., 'beacon_0' -> 0)
+        try:
+            beacon_id = int(msg.header.frame_id.split('_')[1])
+        except (IndexError, ValueError):
+            return
+
+        marker = Marker()
+        marker.header.frame_id = 'odom'
+        marker.header.stamp = msg.header.stamp
+        marker.ns = 'ekf_beacons'
+        marker.id = beacon_id
+        marker.type = Marker.CYLINDER
+        marker.action = Marker.ADD
+        
+        marker.pose.position.x = msg.pose.pose.position.x
+        marker.pose.position.y = msg.pose.pose.position.y
+        marker.pose.position.z = msg.pose.pose.position.z
+        
+        marker.pose.orientation.x = 0.0
+        marker.pose.orientation.y = 0.0
+        marker.pose.orientation.z = 0.0
+        marker.pose.orientation.w = 1.0
+        
+        marker.scale.x = 0.2
+        marker.scale.y = 0.2
+        marker.scale.z = 1.0
+        
+        # Color EKF beacons differently from ground truth (e.g., bright green or blue)
+        marker.color.r = 0.0
+        marker.color.g = 1.0
+        marker.color.b = 1.0
+        marker.color.a = 0.8
+        
+        self.ekf_beacon_markers[beacon_id] = marker
+        
+        marker_array = MarkerArray()
+        marker_array.markers = list(self.ekf_beacon_markers.values())
+        self.ekf_beacon_viz_pub.publish(marker_array)
 
 def main(args=None):
     rclpy.init(args=args)
